@@ -1,0 +1,2 @@
+- [DATN HaUI overview](project_datn_overview.md) — đồ án: chatbot LLM local + ComfyUI tạo/edit ảnh, RTX 3050 4GB, FastAPI + Next.js + Ollama/Qwen API + SQLite. Có phase mapping chi tiết
+- [Incremental scaffolding](feedback_incremental_scaffolding.md) — chỉ tạo file/folder khi sắp dùng, không pre-create skeleton cho phase sau, mỗi phase tự chạy standalone

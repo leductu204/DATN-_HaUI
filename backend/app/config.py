@@ -12,5 +12,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:4b"
 
+    comfy_base_url: str = "http://127.0.0.1:8188"
+    comfy_timeout_seconds: float = 300.0
+
 
 settings = Settings()

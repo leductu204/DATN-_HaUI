@@ -9,5 +9,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
     database_url: str = "sqlite:///./app.db"
 
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen3:4b"
+
 
 settings = Settings()

@@ -17,7 +17,8 @@ type: project
 ## Stack đã chốt
 - BE: Python + FastAPI.
 - FE: Next.js / React + Tailwind.
-- LLM runtime: Ollama (local, qwen2.5:3b CPU) + Qwen API qua DashScope OpenAI-compatible (cloud). User chọn 1 trong 2 mỗi request qua dropdown.
+- LLM runtime: Ollama (local, **qwen3:4b** CPU) + Qwen API qua DashScope OpenAI-compatible (cloud). User chọn 1 trong 2 mỗi request qua dropdown.
+- Qwen3 strategy: chat thường prefix `/no_think` để skip thinking (tốc độ ~ngang 3B); khi có tools (Phase 5) để full think mode cho dispatch chính xác. Set `OLLAMA_KEEP_ALIVE=5m` (hoặc `2m` nếu RAM căng) để Ollama unload model khi idle, nhường RAM cho ComfyUI.
 - Image gen: ComfyUI (gọi qua API HTTP /prompt + WS /ws progress).
 - DB: SQLite.
 - Migrations: Alembic, setup từ Phase 1.

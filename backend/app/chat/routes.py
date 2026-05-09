@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth.deps import get_current_user
-from app.chat import repository
+from app.chat import orchestrator, repository
 from app.chat.schemas import (
     ConversationCreate,
     ConversationOut,
@@ -60,18 +60,9 @@ async def post_message(
     if convo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
 
-    repository.append_message(db, conversation_id, "user", payload.content)
-
-    history = repository.list_messages(db, conversation_id)
-    messages_for_llm = [{"role": m.role, "content": m.content} for m in history]
-
     try:
-        reply = await ollama_client.chat(messages_for_llm)
+        return await orchestrator.handle_message(
+            convo, payload.content, current_user, db
+        )
     except ollama_client.OllamaError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
-
-    assistant_msg = repository.append_message(
-        db, conversation_id, "assistant", reply
-    )
-    repository.touch_conversation(db, convo)
-    return assistant_msg

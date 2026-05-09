@@ -42,9 +42,20 @@ def list_messages(db: Session, conversation_id: int) -> list[Message]:
 
 
 def append_message(
-    db: Session, conversation_id: int, role: str, content: str
+    db: Session,
+    conversation_id: int,
+    role: str,
+    content: str,
+    tool_calls: list | None = None,
+    tool_call_id: str | None = None,
 ) -> Message:
-    msg = Message(conversation_id=conversation_id, role=role, content=content)
+    msg = Message(
+        conversation_id=conversation_id,
+        role=role,
+        content=content,
+        tool_calls=tool_calls,
+        tool_call_id=tool_call_id,
+    )
     db.add(msg)
     db.commit()
     db.refresh(msg)

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,4 +27,6 @@ class MessageOut(BaseModel):
     id: int
     role: str
     content: str
+    tool_calls: list[Any] | None = None
+    tool_call_id: str | None = None
     created_at: datetime

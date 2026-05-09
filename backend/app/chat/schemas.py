@@ -1,16 +1,29 @@
-from typing import Literal
+from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ChatMessage(BaseModel):
-    role: Literal["user", "assistant", "system"]
+class ConversationCreate(BaseModel):
+    title: str | None = None
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageCreate(BaseModel):
     content: str = Field(min_length=1)
 
 
-class ChatRequest(BaseModel):
-    messages: list[ChatMessage] = Field(min_length=1)
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-
-class ChatResponse(BaseModel):
-    reply: str
+    id: int
+    role: str
+    content: str
+    created_at: datetime

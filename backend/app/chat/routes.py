@@ -1,21 +1,77 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.auth.deps import get_current_user
-from app.chat.schemas import ChatRequest, ChatResponse
+from app.chat import repository
+from app.chat.schemas import (
+    ConversationCreate,
+    ConversationOut,
+    MessageCreate,
+    MessageOut,
+)
 from app.db.models import User
+from app.db.session import get_db
 from app.llm import ollama_client
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(prefix="/conversations", tags=["chat"])
 
 
-@router.post("", response_model=ChatResponse)
-async def chat(
-    payload: ChatRequest,
+@router.post("", response_model=ConversationOut, status_code=201)
+def create_conversation(
+    payload: ConversationCreate,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    messages = [m.model_dump() for m in payload.messages]
+    return repository.create_conversation(db, current_user.id, payload.title)
+
+
+@router.get("", response_model=list[ConversationOut])
+def list_conversations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return repository.list_user_conversations(db, current_user.id)
+
+
+@router.get("/{conversation_id}/messages", response_model=list[MessageOut])
+def list_messages(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    convo = repository.get_user_conversation(db, conversation_id, current_user.id)
+    if convo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+    return repository.list_messages(db, conversation_id)
+
+
+@router.post(
+    "/{conversation_id}/messages",
+    response_model=MessageOut,
+    status_code=201,
+)
+async def post_message(
+    conversation_id: int,
+    payload: MessageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    convo = repository.get_user_conversation(db, conversation_id, current_user.id)
+    if convo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+
+    repository.append_message(db, conversation_id, "user", payload.content)
+
+    history = repository.list_messages(db, conversation_id)
+    messages_for_llm = [{"role": m.role, "content": m.content} for m in history]
+
     try:
-        reply = await ollama_client.chat(messages)
+        reply = await ollama_client.chat(messages_for_llm)
     except ollama_client.OllamaError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
-    return ChatResponse(reply=reply)
+
+    assistant_msg = repository.append_message(
+        db, conversation_id, "assistant", reply
+    )
+    repository.touch_conversation(db, convo)
+    return assistant_msg

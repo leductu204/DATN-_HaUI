@@ -99,27 +99,47 @@ class ComfyClient:
             raise ComfyError(f"ComfyUI /view returned HTTP {resp.status_code}")
         return resp.content
 
+    async def free(self) -> None:
+        """Ask ComfyUI to unload all models from VRAM + RAM.
+
+        Best-effort: swallow errors since the main generation has either
+        already succeeded or already raised. Without this, two different
+        diffusion models (txt2img + img2img edit) compete for the user's
+        4GB VRAM / 7GB free RAM and trigger pagefile swap.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+                await client.post(
+                    f"{self.base_url}/free",
+                    json={"unload_models": True, "free_memory": True},
+                )
+        except Exception:
+            pass
+
     async def generate(
         self,
         workflow: dict,
         output_node_id: str = "9",
         timeout_seconds: float = 300.0,
     ) -> bytes:
-        prompt_id = await self.submit(workflow)
-        await self.wait(prompt_id, timeout_seconds)
-        history = await self.history(prompt_id)
-        entry = history.get(prompt_id) or {}
-        outputs = entry.get("outputs") or {}
-        node_output = outputs.get(output_node_id) or {}
-        images = node_output.get("images") or []
-        if not images:
-            raise ComfyError(
-                f"No images at output node {output_node_id}. "
-                f"Outputs keys: {list(outputs.keys())}"
+        try:
+            prompt_id = await self.submit(workflow)
+            await self.wait(prompt_id, timeout_seconds)
+            history = await self.history(prompt_id)
+            entry = history.get(prompt_id) or {}
+            outputs = entry.get("outputs") or {}
+            node_output = outputs.get(output_node_id) or {}
+            images = node_output.get("images") or []
+            if not images:
+                raise ComfyError(
+                    f"No images at output node {output_node_id}. "
+                    f"Outputs keys: {list(outputs.keys())}"
+                )
+            img_info = images[0]
+            return await self.fetch_image(
+                filename=img_info["filename"],
+                subfolder=img_info.get("subfolder", ""),
+                type_=img_info.get("type", "output"),
             )
-        img_info = images[0]
-        return await self.fetch_image(
-            filename=img_info["filename"],
-            subfolder=img_info.get("subfolder", ""),
-            type_=img_info.get("type", "output"),
-        )
+        finally:
+            await self.free()

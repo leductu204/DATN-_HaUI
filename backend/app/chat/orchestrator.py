@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,27 @@ SYSTEM_PROMPT = (
     "3. After a successful tool call, write a short natural-language "
     "confirmation — do NOT repeat the URL, the user sees the image inline."
 )
+
+
+_TITLE_MAX_CHARS = 60
+
+
+def _derive_title(text: str) -> str:
+    """Make a short conversation title from the first user message.
+
+    Strips qwen3 command prefixes (/think, /no_think), trims whitespace,
+    truncates at a word boundary near 60 chars.
+    """
+    cleaned = re.sub(r"^/(no_think|think)\s*", "", text, flags=re.IGNORECASE).strip()
+    if not cleaned:
+        return "New chat"
+    if len(cleaned) <= _TITLE_MAX_CHARS:
+        return cleaned
+    cutoff = cleaned[:_TITLE_MAX_CHARS]
+    last_space = cutoff.rfind(" ")
+    if last_space > 20:
+        return cutoff[:last_space] + "…"
+    return cutoff + "…"
 
 
 def _format_for_llm(messages: list[Message]) -> list[dict]:
@@ -113,7 +135,17 @@ async def handle_message(
     dispatch tools, save all intermediate messages, return final assistant
     message.
     """
+    existing = repository.list_messages(db, conversation.id)
+    is_first_user_msg = not any(m.role == "user" for m in existing)
+
     repository.append_message(db, conversation.id, "user", user_content)
+
+    if is_first_user_msg and conversation.title == "New chat":
+        new_title = _derive_title(user_content)
+        if new_title and new_title != "New chat":
+            conversation.title = new_title
+            db.add(conversation)
+            db.commit()
 
     final_message: Message | None = None
     for _ in range(MAX_TOOL_ITERATIONS):

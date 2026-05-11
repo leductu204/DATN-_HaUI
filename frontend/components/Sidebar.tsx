@@ -36,6 +36,14 @@ export default function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Refetch when chat page signals a change (new title after first message,
+  // updated_at bump after each send).
+  useEffect(() => {
+    const onChange = () => reload();
+    window.addEventListener("conversations-changed", onChange);
+    return () => window.removeEventListener("conversations-changed", onChange);
+  }, []);
+
   async function handleNewChat() {
     setCreating(true);
     try {

@@ -71,10 +71,15 @@ export default function ConversationPage({
         method: "POST",
         body: JSON.stringify({ content, provider }),
       });
-      const fresh = await api<Message[]>(
-        `/conversations/${conversationId}/messages`,
-      );
+      const [fresh, convos] = await Promise.all([
+        api<Message[]>(`/conversations/${conversationId}/messages`),
+        api<Conversation[]>(`/conversations`),
+      ]);
       setMessages(fresh);
+      const updated = convos.find((c) => c.id === conversationId);
+      if (updated) setConversation(updated);
+      // Tell the sidebar its list is stale (new title, updated_at).
+      window.dispatchEvent(new Event("conversations-changed"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gửi tin nhắn thất bại");
       setMessages((m) => m.filter((x) => x.id !== optimistic.id));

@@ -6,6 +6,7 @@ from app.chat import orchestrator, repository
 from app.chat.schemas import (
     ConversationCreate,
     ConversationOut,
+    ConversationUpdate,
     MessageCreate,
     MessageOut,
 )
@@ -31,6 +32,19 @@ def list_conversations(
     current_user: User = Depends(get_current_user),
 ):
     return repository.list_user_conversations(db, current_user.id)
+
+
+@router.patch("/{conversation_id}", response_model=ConversationOut)
+def update_conversation(
+    conversation_id: int,
+    payload: ConversationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    convo = repository.get_user_conversation(db, conversation_id, current_user.id)
+    if convo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+    return repository.update_conversation_title(db, convo, payload.title.strip())
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageOut])

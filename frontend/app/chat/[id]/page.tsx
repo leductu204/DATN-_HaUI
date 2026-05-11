@@ -49,6 +49,21 @@ export default function ConversationPage({
     };
   }, [conversationId]);
 
+  // Refetch the header title when the sidebar signals a rename or change.
+  useEffect(() => {
+    const onChange = async () => {
+      try {
+        const convos = await api<Conversation[]>(`/conversations`);
+        const updated = convos.find((c) => c.id === conversationId);
+        if (updated) setConversation(updated);
+      } catch {
+        // ignore — 401 handled by api()
+      }
+    };
+    window.addEventListener("conversations-changed", onChange);
+    return () => window.removeEventListener("conversations-changed", onChange);
+  }, [conversationId]);
+
   async function handleSend(content: string) {
     setSending(true);
     setError(null);

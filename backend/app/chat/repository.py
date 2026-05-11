@@ -66,3 +66,13 @@ def touch_conversation(db: Session, conversation: Conversation) -> None:
     conversation.updated_at = datetime.utcnow()
     db.add(conversation)
     db.commit()
+
+
+def update_conversation_title(
+    db: Session, conversation: Conversation, title: str
+) -> Conversation:
+    conversation.title = title
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    return conversation

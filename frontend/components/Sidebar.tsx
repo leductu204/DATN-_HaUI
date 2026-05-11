@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { api } from "@/lib/api";
@@ -13,6 +13,9 @@ export default function Sidebar() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   async function reload() {
     try {
@@ -58,6 +61,42 @@ export default function Sidebar() {
     }
   }
 
+  function startEdit(c: Conversation, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingId(c.id);
+    setEditValue(c.title);
+    setTimeout(() => editInputRef.current?.select(), 0);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValue("");
+  }
+
+  async function commitEdit(id: number) {
+    const trimmed = editValue.trim();
+    const original = conversations.find((c) => c.id === id);
+    setEditingId(null);
+    if (!trimmed || !original || trimmed === original.title) {
+      setEditValue("");
+      return;
+    }
+    setConversations((list) =>
+      list.map((c) => (c.id === id ? { ...c, title: trimmed } : c)),
+    );
+    setEditValue("");
+    try {
+      await api(`/conversations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title: trimmed }),
+      });
+      window.dispatchEvent(new Event("conversations-changed"));
+    } catch {
+      reload();
+    }
+  }
+
   return (
     <aside className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
       <div className="p-3 border-b border-slate-800">
@@ -79,18 +118,54 @@ export default function Sidebar() {
         )}
         {conversations.map((c) => {
           const active = pathname === `/chat/${c.id}`;
+          const isEditing = editingId === c.id;
+          if (isEditing) {
+            return (
+              <input
+                key={c.id}
+                ref={editInputRef}
+                autoFocus
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitEdit(c.id);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelEdit();
+                  }
+                }}
+                onBlur={() => commitEdit(c.id)}
+                className="w-full px-3 py-2 text-sm bg-slate-950 border border-blue-600 rounded-md focus:outline-none text-white"
+              />
+            );
+          }
           return (
-            <Link
+            <div
               key={c.id}
-              href={`/chat/${c.id}`}
-              className={`block px-3 py-2 text-sm rounded-md truncate transition-colors ${
-                active
-                  ? "bg-slate-800 text-white"
-                  : "text-slate-300 hover:bg-slate-800/50"
+              className={`group flex items-center rounded-md transition-colors ${
+                active ? "bg-slate-800" : "hover:bg-slate-800/50"
               }`}
+              onDoubleClick={(e) => startEdit(c, e)}
             >
-              {c.title}
-            </Link>
+              <Link
+                href={`/chat/${c.id}`}
+                className={`flex-1 min-w-0 px-3 py-2 text-sm truncate ${
+                  active ? "text-white" : "text-slate-300"
+                }`}
+              >
+                {c.title}
+              </Link>
+              <button
+                type="button"
+                onClick={(e) => startEdit(c, e)}
+                title="Đổi tên (hoặc double-click)"
+                className="opacity-0 group-hover:opacity-100 text-xs text-slate-400 hover:text-white px-2 py-1 mr-1 rounded transition-opacity"
+              >
+                Sửa
+              </button>
+            </div>
           );
         })}
       </nav>

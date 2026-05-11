@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.chat import repository
 from app.comfyui.client import ComfyError
 from app.db.models import Conversation, Message, User
+from app.images import repository as image_repository
 from app.images import service as image_service
 from app.llm import ollama_client
 from app.llm.tools import TOOLS
@@ -13,13 +14,21 @@ from app.llm.tools import TOOLS
 MAX_TOOL_ITERATIONS = 3
 
 SYSTEM_PROMPT = (
-    "You are a helpful assistant integrated with an image generation tool. "
-    "Use the `generate_image` tool ONLY when the user explicitly asks to "
-    "draw, create, render, or generate an image. For all other requests "
-    "(questions, conversation, math, explanations), reply with text and do "
-    "NOT call the tool. After a successful image generation, write a brief "
-    "natural-language reply confirming the image is ready — do not repeat "
-    "the URL, the user already sees it."
+    "You are a helpful assistant with two image tools:\n"
+    "- generate_image: create a NEW image from scratch. Use when the user "
+    "asks to draw, create, render, or generate something.\n"
+    "- edit_image: modify the user's MOST RECENT image. Use when the user "
+    "asks to restyle, transform, regenerate-with-changes, or otherwise "
+    "modify an image already in this conversation (\"make it anime\", "
+    "\"change the colors\", \"try a different version\").\n\n"
+    "Rules:\n"
+    "1. For non-image requests (questions, math, conversation), reply with "
+    "text — do NOT call either tool.\n"
+    "2. For edit_image, the `target_prompt` must describe the FULL final "
+    "image (subject + style + setting), not just the change. Translate "
+    "Vietnamese user requests into descriptive English prompts.\n"
+    "3. After a successful tool call, write a short natural-language "
+    "confirmation — do NOT repeat the URL, the user sees the image inline."
 )
 
 
@@ -52,6 +61,45 @@ async def _dispatch_tool(name: str, args: dict, user: User, db: Session) -> dict
             "image_id": image.id,
             "url": f"/static/images/{image.filename}",
         }
+
+    if name == "edit_image":
+        target_prompt = args.get("target_prompt")
+        if not target_prompt or not isinstance(target_prompt, str):
+            return {"status": "error", "error": "target_prompt is required"}
+        strength = args.get("strength")
+        try:
+            strength = float(strength) if strength is not None else 0.65
+        except (TypeError, ValueError):
+            strength = 0.65
+
+        source = image_repository.get_latest_user_image(db, user.id)
+        if source is None:
+            return {
+                "status": "error",
+                "error": (
+                    "No image to edit. Ask the user to generate an image "
+                    "first, then try the edit again."
+                ),
+            }
+        try:
+            image = await image_service.edit_and_save(
+                source_image=source,
+                target_prompt=target_prompt,
+                strength=strength,
+                user_id=user.id,
+                db=db,
+            )
+        except ComfyError as e:
+            return {"status": "error", "error": str(e)}
+        except FileNotFoundError as e:
+            return {"status": "error", "error": str(e)}
+        return {
+            "status": "ok",
+            "image_id": image.id,
+            "url": f"/static/images/{image.filename}",
+            "edited_from": source.id,
+        }
+
     return {"status": "error", "error": f"Unknown tool: {name}"}
 
 

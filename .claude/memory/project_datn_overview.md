@@ -18,7 +18,9 @@ type: project
 - BE: Python + FastAPI.
 - FE: Next.js / React + Tailwind.
 - LLM runtime: Ollama (local, **qwen3:4b** CPU) + Qwen API qua DashScope OpenAI-compatible (cloud). User chọn 1 trong 2 mỗi request qua dropdown.
-- Qwen3 strategy: chat thường prefix `/no_think` để skip thinking (tốc độ ~ngang 3B); khi có tools (Phase 5) để full think mode cho dispatch chính xác. Set `OLLAMA_KEEP_ALIVE=5m` (hoặc `2m` nếu RAM căng) để Ollama unload model khi idle, nhường RAM cho ComfyUI.
+- Qwen3 strategy: chat thường prefix `/no_think` để skip thinking (tốc độ ~ngang 3B); khi có tools (Phase 5) để full think mode cho dispatch chính xác. **Set `OLLAMA_KEEP_ALIVE=0`** (force unload sau mỗi request) để khi ComfyUI gen ảnh có đủ RAM. Trade-off: mỗi LLM call reload model 10-15s. Phase 7 cần set env này trong `run_dev.bat` hoặc tài liệu setup.
+- ComfyUI: chạy **không thêm flag VRAM** — default `--normalvram` đã tự split smart giữa VRAM (4GB) và RAM, ưu tiên nhét layer compute-heavy vào VRAM để tối đa GPU speed. KHÔNG dùng `--lowvram` (sẽ ép tất cả qua RAM → chậm). Mỗi `ComfyClient.generate()` BE tự gọi `/free` (commit `c12803d`) để unload model sau gen → đảm bảo swap z-image ↔ OmniGen2 không OOM.
+- Resolution cap: 512-768px cho cả gen và edit. >1024 dễ OOM.
 - Image gen: ComfyUI (gọi qua API HTTP /prompt + WS /ws progress).
 - DB: SQLite.
 - Migrations: Alembic, setup từ Phase 1.
@@ -30,7 +32,9 @@ type: project
 - `qwen_3_4b.safetensors` (text encoder, lumina2).
 - `ae.safetensors` (VAE).
 - Workflow mẫu txt2img: `c:\Users\leduc\Downloads\image_z_image_turbo.json` — KSampler 4 steps, cfg 1, sampler `res_multistep`, scheduler `simple`, ModelSamplingAuraFlow shift=3, EmptySD3LatentImage 512x512.
-- Phase 7 sẽ tải thêm model edit (Qwen-Image-Edit ưu tiên, fallback FLUX Kontext nếu cần).
+- Phase 7 edit: **z-image-turbo img2img** (cùng model với Phase 4 txt2img, KHÔNG tải thêm). Lý do (sau 2 lần research lại): OmniGen2 native cần 17GB VRAM, GGUF Q4 vẫn cần Qwen2.5-VL encoder → 5-15 min/edit khi offload; Qwen-Image-Edit-2511 dùng Qwen2.5-VL-7B encoder KHÁC qwen_3_4b mày đã có (không reuse được), Q2_K stack >12GB → swap pagefile; FLUX Kontext Q2_K borderline 3-6min/edit với swap risk. Trên RTX 3050 4GB + 7GB free RAM, KHÔNG model instruction-edit nào chạy được <3min reliably.
+- Phase 7 implementation: workflow giống txt2img, thay `EmptySD3LatentImage` bằng `LoadImage`+`VAEEncode`, `KSampler.denoise=0.5-0.75`. Tool `edit_image(image_id, target_prompt, strength=0.65)` — target_prompt là mô tả **ảnh đích toàn bộ**, KHÔNG phải instruction "đổi X thành Y". LLM (qwen3:4b) sẽ phải dịch user instruction thành full description trước khi call tool.
+- Scope edit Phase 7: tốt cho style transfer, variations. Yếu cho color swap, object add (cần model instruction-trained không chạy được trên hardware này). Báo cáo DATN cần document giới hạn này.
 
 ## Project layout — root
 ```

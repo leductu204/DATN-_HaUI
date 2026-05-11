@@ -32,6 +32,32 @@ class ComfyClient:
     def ws_url(self) -> str:
         return f"{_http_to_ws(self.base_url)}/ws?clientId={self.client_id}"
 
+    async def upload_image(self, image_bytes: bytes, name: str) -> str:
+        """Upload an image to ComfyUI's input/ folder. Returns the saved
+        filename (ComfyUI may sanitise or deduplicate; trust its response).
+        """
+        files = {"image": (name, image_bytes, "image/png")}
+        data = {"overwrite": "true", "type": "input"}
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+            try:
+                resp = await client.post(
+                    f"{self.base_url}/upload/image", files=files, data=data
+                )
+            except httpx.RequestError as e:
+                raise ComfyError(
+                    f"Cannot reach ComfyUI at {self.base_url}: {e}"
+                ) from e
+        if resp.status_code != 200:
+            raise ComfyError(
+                f"ComfyUI /upload/image returned HTTP {resp.status_code}: "
+                f"{resp.text[:300]}"
+            )
+        body = resp.json()
+        saved = body.get("name")
+        if not saved:
+            raise ComfyError(f"No filename in /upload/image response: {body}")
+        return saved
+
     async def submit(self, workflow: dict) -> str:
         payload = {"prompt": workflow, "client_id": self.client_id}
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:

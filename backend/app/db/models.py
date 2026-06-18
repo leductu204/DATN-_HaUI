@@ -58,3 +58,20 @@ class Image(Base):
     seed: Mapped[int] = mapped_column(BigInteger)
     filename: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Workflow(Base):
+    __tablename__ = "workflows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), default="Untitled workflow")
+    # React Flow graph: {"nodes": [...], "edges": [...], "viewport": {...}}.
+    # Persisted verbatim from the FE builder; BE never inspects its shape.
+    graph: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )

@@ -23,6 +23,10 @@ class ConversationOut(BaseModel):
 
 class MessageCreate(BaseModel):
     content: str = Field(min_length=1)
+    # Optional explicit overrides from the chat input dropdowns. None = let the
+    # LLM infer quality/aspect from the message (the "auto" choice).
+    quality: str | None = None
+    aspect_ratio: str | None = None
 
 
 class MessageOut(BaseModel):

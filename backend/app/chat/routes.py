@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth.deps import get_current_user
@@ -59,6 +61,15 @@ def list_messages(
     return repository.list_messages(db, conversation_id)
 
 
+async def _poll_disconnect(request: Request) -> None:
+    """Resolve when the client drops the connection (e.g. the Stop button
+    aborts the fetch)."""
+    while True:
+        if await request.is_disconnected():
+            return
+        await asyncio.sleep(0.4)
+
+
 @router.post(
     "/{conversation_id}/messages",
     response_model=MessageOut,
@@ -67,6 +78,7 @@ def list_messages(
 async def post_message(
     conversation_id: int,
     payload: MessageCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -74,9 +86,34 @@ async def post_message(
     if convo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
 
-    try:
-        return await orchestrator.handle_message(
-            convo, payload.content, current_user, db
+    # Run the chat work as a task and race it against client-disconnect. If the
+    # user hits Stop (fetch aborts → client disconnects), cancel the task so the
+    # in-flight Ollama call is dropped instead of running to completion.
+    work = asyncio.create_task(
+        orchestrator.handle_message(
+            convo,
+            payload.content,
+            current_user,
+            db,
+            quality=payload.quality,
+            aspect_ratio=payload.aspect_ratio,
         )
+    )
+    watcher = asyncio.create_task(_poll_disconnect(request))
+    try:
+        done, _ = await asyncio.wait(
+            {work, watcher}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if work in done:
+            return work.result()
+        # Client disconnected → stop the orchestrator.
+        work.cancel()
+        try:
+            await work
+        except BaseException:
+            pass
+        raise HTTPException(499, "Đã dừng phản hồi")
     except ollama_client.OllamaError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
+    finally:
+        watcher.cancel()

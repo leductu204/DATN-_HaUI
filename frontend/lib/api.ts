@@ -23,6 +23,7 @@ export function clearToken(): void {
 export async function api<T = unknown>(
   path: string,
   init: RequestInit = {},
+  opts: { timeoutMs?: number } = {},
 ): Promise<T> {
   const token = getToken();
   const headers = new Headers(init.headers);
@@ -38,7 +39,27 @@ export async function api<T = unknown>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const resp = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  // Optional client-side timeout so a hung backend/tunnel doesn't leave the UI
+  // waiting forever. Long-running calls (image gen) pass a generous timeoutMs.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let signal = init.signal ?? undefined;
+  if (opts.timeoutMs && !signal) {
+    const controller = new AbortController();
+    timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+    signal = controller.signal;
+  }
+
+  let resp: Response;
+  try {
+    resp = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError(408, "Hết thời gian chờ phản hồi");
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 
   if (resp.status === 401) {
     if (typeof window !== "undefined") {

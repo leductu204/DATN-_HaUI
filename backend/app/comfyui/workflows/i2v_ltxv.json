@@ -1,0 +1,110 @@
+{
+  "ckpt": {
+    "inputs": {"ckpt_name": "ltxv-2b-0.9.8-distilled-fp8.safetensors"},
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {"title": "Load LTX-Video Checkpoint"}
+  },
+  "clip": {
+    "inputs": {
+      "clip_name": "t5xxl_fp8_e4m3fn.safetensors",
+      "type": "ltxv",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "Load T5 (ltxv)"}
+  },
+  "pos": {
+    "inputs": {"text": "placeholder", "clip": ["clip", 0]},
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Positive (motion description)"}
+  },
+  "neg": {
+    "inputs": {
+      "text": "low quality, worst quality, deformed, distorted, disfigured, motion smear, motion artifacts, jittery, flickering",
+      "clip": ["clip", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative"}
+  },
+  "load_input": {
+    "inputs": {"image": "placeholder.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "Load Source Image"}
+  },
+  "i2v": {
+    "inputs": {
+      "positive": ["pos", 0],
+      "negative": ["neg", 0],
+      "vae": ["ckpt", 2],
+      "image": ["load_input", 0],
+      "width": 768,
+      "height": 512,
+      "length": 97,
+      "batch_size": 1,
+      "strength": 1.0
+    },
+    "class_type": "LTXVImgToVideo",
+    "_meta": {"title": "LTXV Image to Video"}
+  },
+  "ltxv_cond": {
+    "inputs": {
+      "positive": ["i2v", 0],
+      "negative": ["i2v", 1],
+      "frame_rate": 25.0
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {"title": "LTXV Conditioning"}
+  },
+  "scheduler": {
+    "inputs": {
+      "steps": 8,
+      "max_shift": 2.05,
+      "base_shift": 0.95,
+      "stretch": true,
+      "terminal": 0.1,
+      "latent": ["i2v", 2]
+    },
+    "class_type": "LTXVScheduler",
+    "_meta": {"title": "LTXV Scheduler"}
+  },
+  "sampler_select": {
+    "inputs": {"sampler_name": "euler"},
+    "class_type": "KSamplerSelect",
+    "_meta": {"title": "Sampler (euler)"}
+  },
+  "sampler": {
+    "inputs": {
+      "add_noise": true,
+      "noise_seed": 0,
+      "cfg": 1.0,
+      "model": ["ckpt", 0],
+      "positive": ["ltxv_cond", 0],
+      "negative": ["ltxv_cond", 1],
+      "sampler": ["sampler_select", 0],
+      "sigmas": ["scheduler", 0],
+      "latent_image": ["i2v", 2]
+    },
+    "class_type": "SamplerCustom",
+    "_meta": {"title": "Sampler Custom"}
+  },
+  "decode": {
+    "inputs": {"samples": ["sampler", 0], "vae": ["ckpt", 2]},
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE Decode"}
+  },
+  "create_video": {
+    "inputs": {"images": ["decode", 0], "fps": 24.0},
+    "class_type": "CreateVideo",
+    "_meta": {"title": "Create Video"}
+  },
+  "save": {
+    "inputs": {
+      "video": ["create_video", 0],
+      "filename_prefix": "ltxv-i2v",
+      "format": "mp4",
+      "codec": "h264"
+    },
+    "class_type": "SaveVideo",
+    "_meta": {"title": "Save Video"}
+  }
+}

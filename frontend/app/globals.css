@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind v4: enable class-based dark mode (instead of media query). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 * {
   box-sizing: border-box;
 }
@@ -22,9 +25,33 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #cbd5e1; /* slate-300 */
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #94a3b8; /* slate-400 */
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155; /* slate-700 */
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569; /* slate-600 */
+}
+
+/* React Flow's reserved type names (input/output/default/group) ship built-in
+   node chrome (border/padding/bg). Our custom "output" node collides with that
+   → double-box. Its stylesheet is imported in the component (loads AFTER this
+   file) so we need !important to strip the defaults. */
+.react-flow__node-output,
+.react-flow__node-input,
+.react-flow__node-default {
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  width: auto !important;
+  color: inherit !important;
+  font-size: inherit !important;
+  text-align: left !important;
 }

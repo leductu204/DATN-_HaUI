@@ -12,7 +12,7 @@ export default function HomePage() {
   }, [router]);
 
   return (
-    <div className="flex h-screen items-center justify-center text-slate-500 text-sm">
+    <div className="flex h-screen items-center justify-center text-slate-500 dark:text-slate-500 text-sm">
       Đang tải…
     </div>
   );
